@@ -1,0 +1,312 @@
+{% extends "base.html" %}
+
+{% block title %}Upload Certificate - Certificate Dashboard{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h1 class="mb-0">Upload Certificate</h1>
+        <p class="text-muted">Add a new certificate to your profile</p>
+    </div>
+    <div class="col text-end">
+        <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-1"></i> Back to Dashboard
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card shadow-sm">
+            <div class="card-body p-4">
+                <h5 class="card-title mb-4">Certificate Details</h5>
+                
+                <form id="uploadForm" enctype="multipart/form-data">
+                    <div class="mb-4">
+                        <label for="courseSelect" class="form-label">Course</label>
+                        <select class="form-select" id="courseSelect" name="course_id" required>
+                            <option value="" selected disabled>Select a course</option>
+                            <!-- Courses will be loaded dynamically -->
+                        </select>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label for="performanceScore" class="form-label">Performance Score (%)</label>
+                        <input type="number" class="form-control" id="performanceScore" name="performance_score" min="0" max="100" placeholder="Enter your score">
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label for="feedback" class="form-label">Feedback (Optional)</label>
+                        <textarea class="form-control" id="feedback" name="feedback" rows="3" placeholder="Share your thoughts about the course"></textarea>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label class="form-label">Certificate Image</label>
+                        <div class="upload-area" id="uploadArea">
+                            <input type="file" id="certificateImage" name="certificate_image" class="d-none" accept="image/*" required>
+                            <div class="upload-icon">
+                                <i class="fas fa-cloud-upload-alt"></i>
+                            </div>
+                            <p class="mb-1">Drag and drop your certificate image here</p>
+                            <p class="text-muted small">or click to browse</p>
+                            <div id="fileInfo" class="mt-2 d-none">
+                                <div class="alert alert-success py-2">
+                                    <i class="fas fa-check-circle me-2"></i>
+                                    <span id="fileName">file.jpg</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-upload me-2"></i>Upload Certificate
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card shadow-sm">
+            <div class="card-body p-4">
+                <h5 class="card-title mb-4">Recommendations</h5>
+                <div id="recommendationsContainer">
+                    <div class="text-center text-muted py-4">
+                        <i class="fas fa-lightbulb fa-2x mb-3"></i>
+                        <p>Upload a certificate to get personalized course recommendations</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Loading Overlay -->
+<div id="loadingOverlay" class="position-fixed top-0 start-0 w-100 h-100 d-none" style="background-color: rgba(255, 255, 255, 0.8); z-index: 1050;">
+    <div class="position-absolute top-50 start-50 translate-middle text-center">
+        <div class="spinner-border loading-spinner mb-3" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="mb-0">Processing your certificate...</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Load courses
+        fetchCourses();
+        
+        // Setup file upload area
+        setupFileUpload();
+        
+        // Setup form submission
+        setupFormSubmission();
+    });
+    
+    function fetchCourses() {
+        fetch('/api/courses')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(courses => {
+                const courseSelect = document.getElementById('courseSelect');
+                
+                courses.forEach(course => {
+                    const option = document.createElement('option');
+                    option.value = course.id;
+                    option.textContent = `${course.name} (${course.domain} - ${course.difficulty})`;
+                    courseSelect.appendChild(option);
+                });
+            })
+            .catch(error => {
+                console.error('Error fetching courses:', error);
+                const courseSelect = document.getElementById('courseSelect');
+                courseSelect.innerHTML = '<option value="" disabled>Error loading courses</option>';
+            });
+    }
+    
+    function setupFileUpload() {
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('certificateImage');
+        const fileInfo = document.getElementById('fileInfo');
+        const fileName = document.getElementById('fileName');
+        
+        // Click on upload area to trigger file input
+        uploadArea.addEventListener('click', () => {
+            fileInput.click();
+        });
+        
+        // Handle file selection
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length > 0) {
+                const file = fileInput.files[0];
+                fileName.textContent = file.name;
+                fileInfo.classList.remove('d-none');
+                
+                // Change upload area appearance
+                uploadArea.style.borderColor = 'var(--success-color)';
+                uploadArea.style.backgroundColor = 'rgba(40, 167, 69, 0.05)';
+            } else {
+                fileInfo.classList.add('d-none');
+                uploadArea.style.borderColor = '';
+                uploadArea.style.backgroundColor = '';
+            }
+        });
+        
+        // Drag and drop functionality
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            uploadArea.addEventListener(eventName, preventDefaults, false);
+        });
+        
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        
+        ['dragenter', 'dragover'].forEach(eventName => {
+            uploadArea.addEventListener(eventName, highlight, false);
+        });
+        
+        ['dragleave', 'drop'].forEach(eventName => {
+            uploadArea.addEventListener(eventName, unhighlight, false);
+        });
+        
+        function highlight() {
+            uploadArea.style.borderColor = 'var(--primary-color)';
+            uploadArea.style.backgroundColor = 'rgba(74, 111, 165, 0.05)';
+        }
+        
+        function unhighlight() {
+            uploadArea.style.borderColor = '';
+            uploadArea.style.backgroundColor = '';
+        }
+        
+        uploadArea.addEventListener('drop', handleDrop, false);
+        
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            
+            fileInput.files = files;
+            
+            if (files.length > 0) {
+                const file = files[0];
+                fileName.textContent = file.name;
+                fileInfo.classList.remove('d-none');
+                
+                // Change upload area appearance
+                uploadArea.style.borderColor = 'var(--success-color)';
+                uploadArea.style.backgroundColor = 'rgba(40, 167, 69, 0.05)';
+            }
+        }
+    }
+    
+    function setupFormSubmission() {
+        const form = document.getElementById('uploadForm');
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Show loading overlay
+            loadingOverlay.classList.remove('d-none');
+            
+            const formData = new FormData(form);
+            
+            fetch('/api/certificates', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Hide loading overlay
+                loadingOverlay.classList.add('d-none');
+                
+                // Show success message
+                const alert = document.createElement('div');
+                alert.className = 'alert alert-success alert-dismissible fade show mt-3';
+                alert.innerHTML = `
+                    <i class="fas fa-check-circle me-2"></i>Certificate uploaded successfully!
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                `;
+                form.prepend(alert);
+                
+                // Display recommendations
+                displayRecommendations(data.recommendations);
+                
+                // Reset form
+                form.reset();
+                document.getElementById('fileInfo').classList.add('d-none');
+                document.getElementById('uploadArea').style.borderColor = '';
+                document.getElementById('uploadArea').style.backgroundColor = '';
+            })
+            .catch(error => {
+                console.error('Error uploading certificate:', error);
+                
+                // Hide loading overlay
+                loadingOverlay.classList.add('d-none');
+                
+                // Show error message
+                const alert = document.createElement('div');
+                alert.className = 'alert alert-danger alert-dismissible fade show mt-3';
+                alert.innerHTML = `
+                    <i class="fas fa-exclamation-circle me-2"></i>Failed to upload certificate. Please try again.
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                `;
+                form.prepend(alert);
+            });
+        });
+    }
+    
+    function displayRecommendations(recommendations) {
+        const container = document.getElementById('recommendationsContainer');
+        
+        if (!recommendations || recommendations.length === 0) {
+            container.innerHTML = `
+                <div class="text-center text-muted py-4">
+                    <i class="fas fa-lightbulb fa-2x mb-3"></i>
+                    <p>No recommendations available at this time</p>
+                </div>
+            `;
+            return;
+        }
+        
+        let html = '';
+        
+        recommendations.forEach(course => {
+            html += `
+                <div class="card mb-3 border-0 bg-light">
+                    <div class="card-body p-3">
+                        <h6 class="card-title mb-2">${course.name}</h6>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="badge bg-primary">${course.domain}</span>
+                            <span class="badge bg-secondary">${course.difficulty}</span>
+                        </div>
+                        <p class="card-text small text-muted mb-2">${course.description.substring(0, 100)}...</p>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <small class="text-muted"><i class="fas fa-clock me-1"></i>${course.duration} hours</small>
+                            <a href="${course.url}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                <i class="fas fa-external-link-alt me-1"></i>View Course
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        container.innerHTML = html;
+    }
+</script>
+{% endblock %} 

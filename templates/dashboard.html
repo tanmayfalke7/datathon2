@@ -1,0 +1,453 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Certificate Dashboard{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h1 class="mb-0">Dashboard</h1>
+        <p class="text-muted">Welcome back, {{ current_user.username }}</p>
+    </div>
+    <div class="col text-end">
+        <a href="{{ url_for('upload_certificate') }}" class="btn btn-primary me-2">
+            <i class="fas fa-upload me-1"></i> Upload Certificate
+        </a>
+        <a href="{{ url_for('download_report') }}" class="btn btn-success">
+            <i class="fas fa-download me-1"></i> Download Report
+        </a>
+    </div>
+</div>
+
+<!-- Loading indicator -->
+<div id="loadingIndicator" class="text-center d-none">
+    <div class="spinner-border loading-spinner" role="status">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+</div>
+
+<!-- Statistics Cards -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card stats-card">
+            <div class="card-body">
+                <div class="stats-value" id="totalCourses">-</div>
+                <div class="stats-label">Total Courses</div>
+                <i class="fas fa-graduation-cap mt-3 text-muted"></i>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card stats-card">
+            <div class="card-body">
+                <div class="stats-value" id="averageScore">-</div>
+                <div class="stats-label">Average Score</div>
+                <i class="fas fa-chart-line mt-3 text-muted"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts -->
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Domain Distribution</h5>
+                <div class="chart-container">
+                    <canvas id="domainChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Difficulty Levels</h5>
+                <div class="chart-container">
+                    <canvas id="difficultyChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Course Progress</h5>
+                <div class="chart-container">
+                    <canvas id="progressChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Certificates Table -->
+<div class="card">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="card-title mb-0">Recent Certificates</h5>
+            <div class="input-group" style="width: 300px;">
+                <input type="text" class="form-control" id="certificateSearch" placeholder="Search certificates...">
+                <button class="btn btn-outline-secondary" type="button">
+                    <i class="fas fa-search"></i>
+                </button>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Course Name</th>
+                        <th>Domain</th>
+                        <th>Difficulty</th>
+                        <th>Score</th>
+                        <th>Completion Date</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="certificates-table-body">
+                    <tr>
+                        <td colspan="6" class="text-center">Loading certificates...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Recommended Courses -->
+<div class="card mt-4">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="card-title mb-0">Recommended Courses</h5>
+        </div>
+        <div class="row" id="recommended-courses">
+            <div class="col-12 text-center">
+                <p class="text-muted">Loading recommendations...</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/recommendations.js') }}"></script>
+<script>
+    // Initialize dashboard when the page loads
+    document.addEventListener('DOMContentLoaded', () => {
+        const userId = document.body.dataset.userId;
+        if (userId) {
+            console.log("Dashboard initialized with user ID:", userId);
+            fetchUserStatistics();
+            fetchCertificates();
+            fetchRecommendedCourses();
+        } else {
+            console.error('User ID not found in data attribute');
+        }
+    });
+
+    // Function to fetch user statistics
+    function fetchUserStatistics() {
+        const userId = document.body.dataset.userId;
+        if (!userId) return;
+
+        fetch(`/api/statistics/${userId}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Update statistics cards
+                document.getElementById('totalCourses').textContent = data.total_courses;
+                document.getElementById('averageScore').textContent = data.average_score ? `${data.average_score.toFixed(1)}%` : 'N/A';
+
+                // Create domain distribution chart
+                createDomainChart(data.domains);
+                
+                // Create difficulty levels chart
+                createDifficultyChart(data.difficulty_levels);
+                
+                // Create progress chart
+                createProgressChart(data.certificates);
+            })
+            .catch(error => {
+                console.error('Error fetching statistics:', error);
+                document.getElementById('totalCourses').textContent = 'Error';
+                document.getElementById('averageScore').textContent = 'Error';
+            });
+    }
+
+    // Function to fetch certificates
+    function fetchCertificates() {
+        const userId = document.body.dataset.userId;
+        if (!userId) return;
+
+        fetch(`/api/certificates/${userId}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                updateCertificatesTable(data);
+            })
+            .catch(error => {
+                console.error('Error fetching certificates:', error);
+                document.getElementById('certificates-table-body').innerHTML = `
+                    <tr>
+                        <td colspan="6" class="text-center text-danger">
+                            <i class="fas fa-exclamation-circle me-2"></i>Error loading certificates
+                        </td>
+                    </tr>
+                `;
+            });
+    }
+
+    // Function to update certificates table
+    function updateCertificatesTable(certificates) {
+        const tableBody = document.getElementById('certificates-table-body');
+        
+        if (certificates.length === 0) {
+            tableBody.innerHTML = `
+                <tr>
+                    <td colspan="6" class="text-center py-4">
+                        <i class="fas fa-info-circle text-muted me-2"></i>No certificates found
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+        
+        let tableHTML = '';
+        certificates.forEach(cert => {
+            const completionDate = new Date(cert.completion_date).toLocaleDateString();
+            const scoreClass = cert.performance_score >= 80 ? 'text-success' : 
+                              cert.performance_score >= 60 ? 'text-warning' : 'text-danger';
+            
+            tableHTML += `
+                <tr>
+                    <td>${cert.course_name}</td>
+                    <td>${cert.domain}</td>
+                    <td>${cert.difficulty}</td>
+                    <td class="${scoreClass}">${cert.performance_score ? cert.performance_score + '%' : 'N/A'}</td>
+                    <td>${completionDate}</td>
+                    <td>
+                        ${cert.image_path ? 
+                            `<a href="/static/${cert.image_path}" target="_blank" class="btn btn-sm btn-outline-secondary">
+                                <i class="fas fa-eye me-1"></i>View
+                            </a>` : 
+                            '<span class="text-muted">No image</span>'
+                        }
+                    </td>
+                </tr>
+            `;
+        });
+        
+        tableBody.innerHTML = tableHTML;
+    }
+
+    // Function to create domain distribution chart
+    function createDomainChart(domains) {
+        const ctx = document.getElementById('domainChart').getContext('2d');
+        
+        const labels = Object.keys(domains);
+        const data = Object.values(domains);
+        const backgroundColors = [
+            'rgba(74, 111, 165, 0.7)',
+            'rgba(40, 167, 69, 0.7)',
+            'rgba(220, 53, 69, 0.7)',
+            'rgba(255, 193, 7, 0.7)',
+            'rgba(23, 162, 184, 0.7)'
+        ];
+        
+        new Chart(ctx, {
+            type: 'pie',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: data,
+                    backgroundColor: backgroundColors,
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    }
+                }
+            }
+        });
+    }
+
+    // Function to create difficulty levels chart
+    function createDifficultyChart(difficultyLevels) {
+        const ctx = document.getElementById('difficultyChart').getContext('2d');
+        
+        const labels = Object.keys(difficultyLevels);
+        const data = Object.values(difficultyLevels);
+        const backgroundColors = [
+            'rgba(40, 167, 69, 0.7)',  // Beginner - Green
+            'rgba(255, 193, 7, 0.7)',  // Intermediate - Yellow
+            'rgba(220, 53, 69, 0.7)'   // Advanced - Red
+        ];
+        
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Number of Courses',
+                    data: data,
+                    backgroundColor: backgroundColors,
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            precision: 0
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                }
+            }
+        });
+    }
+
+    // Function to create progress chart
+    function createProgressChart(certificates) {
+        const ctx = document.getElementById('progressChart').getContext('2d');
+        
+        // Check if we have certificates data
+        if (!certificates || certificates.length === 0) {
+            // Display a message when no data is available
+            const noDataMessage = document.createElement('div');
+            noDataMessage.className = 'text-center text-muted py-4';
+            noDataMessage.innerHTML = `
+                <i class="fas fa-chart-line fa-2x mb-3"></i>
+                <p>No certificate data available for progress tracking</p>
+            `;
+            ctx.canvas.parentNode.appendChild(noDataMessage);
+            return;
+        }
+        
+        // Group certificates by month
+        const monthlyData = {};
+        certificates.forEach(cert => {
+            const date = new Date(cert.completion_date);
+            const monthYear = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+            
+            if (!monthlyData[monthYear]) {
+                monthlyData[monthYear] = 0;
+            }
+            monthlyData[monthYear]++;
+        });
+        
+        // Sort months chronologically
+        const sortedMonths = Object.keys(monthlyData).sort();
+        
+        // Calculate cumulative progress
+        let cumulative = 0;
+        const cumulativeData = [];
+        sortedMonths.forEach(month => {
+            cumulative += monthlyData[month];
+            cumulativeData.push(cumulative);
+        });
+        
+        // Format month labels
+        const monthLabels = sortedMonths.map(month => {
+            const [year, monthNum] = month.split('-');
+            const date = new Date(year, monthNum - 1);
+            return date.toLocaleDateString('default', { month: 'short', year: '2-digit' });
+        });
+        
+        // Create the chart with improved visibility
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: monthLabels,
+                datasets: [{
+                    label: 'Total Courses',
+                    data: cumulativeData,
+                    backgroundColor: 'rgba(74, 111, 165, 0.1)',
+                    borderColor: 'rgba(74, 111, 165, 1)',
+                    borderWidth: 2,
+                    pointBackgroundColor: 'rgba(74, 111, 165, 1)',
+                    pointBorderColor: '#fff',
+                    pointRadius: 4,
+                    tension: 0.1,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            precision: 0
+                        },
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.05)'
+                        }
+                    },
+                    x: {
+                        grid: {
+                            display: false
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                        titleColor: '#333',
+                        bodyColor: '#333',
+                        borderColor: '#ddd',
+                        borderWidth: 1,
+                        padding: 10,
+                        displayColors: false,
+                        callbacks: {
+                            label: function(context) {
+                                return `Total Courses: ${context.raw}`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // Certificate search functionality
+    document.getElementById('certificateSearch').addEventListener('input', function() {
+        const searchTerm = this.value.toLowerCase();
+        const rows = document.querySelectorAll('#certificates-table-body tr');
+        
+        rows.forEach(row => {
+            const text = row.textContent.toLowerCase();
+            if (text.includes(searchTerm)) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+    });
+</script>
+{% endblock %} 
