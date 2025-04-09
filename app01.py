@@ -22,6 +22,7 @@ from reportlab.lib import colors
 from reportlab.lib.units import inch
 import matplotlib.pyplot as plt
 import base64
+import random
 
 # Load environment variables
 load_dotenv()
@@ -167,9 +168,23 @@ def get_course_recommendations(user_data):
             print(f"No courses found in domain {domain}, using default recommendations")
             return get_default_recommendations(user_data)
         
-        # Sort courses by rating and students count
+        # Get user's previously completed courses
+        user_id = user_data.get('user_id')
+        completed_courses = []
+        if user_id:
+            completed_certificates = UserCertificate.query.filter_by(user_id=user_id).all()
+            completed_courses = [cert.course_id for cert in completed_certificates]
+            print(f"User has completed {len(completed_courses)} courses")
+        
+        # Sort courses by rating and students count, but exclude completed courses
+        available_courses = [c for c in domain_courses if c.id not in completed_courses]
+        if not available_courses:
+            print("No available courses in domain after excluding completed ones")
+            return get_default_recommendations(user_data)
+            
+        # Sort by rating and students count
         sorted_courses = sorted(
-            domain_courses,
+            available_courses,
             key=lambda x: (x.rating * 0.7 + (x.students_count / 100000) * 0.3),
             reverse=True
         )
@@ -181,45 +196,48 @@ def get_course_recommendations(user_data):
         # 2. One advanced course in the same domain
         if difficulty.lower() == 'intermediate':
             print("Finding intermediate and advanced course recommendations")
-            # Find the best intermediate course (excluding the completed one)
+            # Find intermediate courses (excluding completed ones)
             intermediate_courses = [c for c in sorted_courses 
-                                 if c.difficulty.lower() == 'intermediate' 
-                                 and c.name != user_data.get('name')]
+                                 if c.difficulty.lower() == 'intermediate']
             
-            # Find the best advanced course
+            # Find advanced courses
             advanced_courses = [c for c in sorted_courses 
                               if c.difficulty.lower() == 'advanced']
             
             print(f"Found {len(intermediate_courses)} intermediate courses and {len(advanced_courses)} advanced courses")
             
-            # Add one intermediate course if available
+            # Add one intermediate course if available (randomly select from top 3)
             if intermediate_courses:
+                top_intermediate = intermediate_courses[:min(3, len(intermediate_courses))]
+                selected_course = random.choice(top_intermediate)
                 recommendations.append({
-                    'id': intermediate_courses[0].id,
-                    'name': intermediate_courses[0].name,
-                    'domain': intermediate_courses[0].domain,
-                    'duration': intermediate_courses[0].duration,
-                    'difficulty': intermediate_courses[0].difficulty,
-                    'prerequisites': intermediate_courses[0].prerequisites,
-                    'description': intermediate_courses[0].description,
-                    'instructor': intermediate_courses[0].instructor,
-                    'rating': intermediate_courses[0].rating,
-                    'url': intermediate_courses[0].url
+                    'id': selected_course.id,
+                    'name': selected_course.name,
+                    'domain': selected_course.domain,
+                    'duration': selected_course.duration,
+                    'difficulty': selected_course.difficulty,
+                    'prerequisites': selected_course.prerequisites,
+                    'description': selected_course.description,
+                    'instructor': selected_course.instructor,
+                    'rating': selected_course.rating,
+                    'url': selected_course.url
                 })
             
-            # Add one advanced course if available
+            # Add one advanced course if available (randomly select from top 3)
             if advanced_courses:
+                top_advanced = advanced_courses[:min(3, len(advanced_courses))]
+                selected_course = random.choice(top_advanced)
                 recommendations.append({
-                    'id': advanced_courses[0].id,
-                    'name': advanced_courses[0].name,
-                    'domain': advanced_courses[0].domain,
-                    'duration': advanced_courses[0].duration,
-                    'difficulty': advanced_courses[0].difficulty,
-                    'prerequisites': advanced_courses[0].prerequisites,
-                    'description': advanced_courses[0].description,
-                    'instructor': advanced_courses[0].instructor,
-                    'rating': advanced_courses[0].rating,
-                    'url': advanced_courses[0].url
+                    'id': selected_course.id,
+                    'name': selected_course.name,
+                    'domain': selected_course.domain,
+                    'duration': selected_course.duration,
+                    'difficulty': selected_course.difficulty,
+                    'prerequisites': selected_course.prerequisites,
+                    'description': selected_course.description,
+                    'instructor': selected_course.instructor,
+                    'rating': selected_course.rating,
+                    'url': selected_course.url
                 })
         
         # If the completed course was advanced, recommend:
@@ -229,8 +247,7 @@ def get_course_recommendations(user_data):
             print("Finding advanced course recommendations")
             # Find other advanced courses in the same domain
             same_domain_advanced = [c for c in sorted_courses 
-                                  if c.difficulty.lower() == 'advanced' 
-                                  and c.name != user_data.get('name')]
+                                  if c.difficulty.lower() == 'advanced']
             
             # Get advanced courses from related domains
             related_domains = {
@@ -246,6 +263,8 @@ def get_course_recommendations(user_data):
                         domain=related_domain,
                         difficulty='Advanced'
                     ).all()
+                    # Filter out completed courses
+                    related_courses = [c for c in related_courses if c.id not in completed_courses]
                     related_domain_courses.extend(related_courses)
             
             print(f"Found {len(same_domain_advanced)} advanced courses in same domain and {len(related_domain_courses)} in related domains")
@@ -256,34 +275,38 @@ def get_course_recommendations(user_data):
                 reverse=True
             )
             
-            # Add one advanced course from the same domain if available
+            # Add one advanced course from the same domain if available (randomly select from top 3)
             if same_domain_advanced:
+                top_same_domain = same_domain_advanced[:min(3, len(same_domain_advanced))]
+                selected_course = random.choice(top_same_domain)
                 recommendations.append({
-                    'id': same_domain_advanced[0].id,
-                    'name': same_domain_advanced[0].name,
-                    'domain': same_domain_advanced[0].domain,
-                    'duration': same_domain_advanced[0].duration,
-                    'difficulty': same_domain_advanced[0].difficulty,
-                    'prerequisites': same_domain_advanced[0].prerequisites,
-                    'description': same_domain_advanced[0].description,
-                    'instructor': same_domain_advanced[0].instructor,
-                    'rating': same_domain_advanced[0].rating,
-                    'url': same_domain_advanced[0].url
+                    'id': selected_course.id,
+                    'name': selected_course.name,
+                    'domain': selected_course.domain,
+                    'duration': selected_course.duration,
+                    'difficulty': selected_course.difficulty,
+                    'prerequisites': selected_course.prerequisites,
+                    'description': selected_course.description,
+                    'instructor': selected_course.instructor,
+                    'rating': selected_course.rating,
+                    'url': selected_course.url
                 })
             
-            # Add one advanced course from a related domain if available
+            # Add one advanced course from a related domain if available (randomly select from top 3)
             if related_domain_courses:
+                top_related = related_domain_courses[:min(3, len(related_domain_courses))]
+                selected_course = random.choice(top_related)
                 recommendations.append({
-                    'id': related_domain_courses[0].id,
-                    'name': related_domain_courses[0].name,
-                    'domain': related_domain_courses[0].domain,
-                    'duration': related_domain_courses[0].duration,
-                    'difficulty': related_domain_courses[0].difficulty,
-                    'prerequisites': related_domain_courses[0].prerequisites,
-                    'description': related_domain_courses[0].description,
-                    'instructor': related_domain_courses[0].instructor,
-                    'rating': related_domain_courses[0].rating,
-                    'url': related_domain_courses[0].url
+                    'id': selected_course.id,
+                    'name': selected_course.name,
+                    'domain': selected_course.domain,
+                    'duration': selected_course.duration,
+                    'difficulty': selected_course.difficulty,
+                    'prerequisites': selected_course.prerequisites,
+                    'description': selected_course.description,
+                    'instructor': selected_course.instructor,
+                    'rating': selected_course.rating,
+                    'url': selected_course.url
                 })
         
         # If the completed course was beginner, recommend:
@@ -309,6 +332,8 @@ def get_course_recommendations(user_data):
                         domain=related_domain,
                         difficulty='Beginner'
                     ).all()
+                    # Filter out completed courses
+                    related_courses = [c for c in related_courses if c.id not in completed_courses]
                     related_domain_courses.extend(related_courses)
             
             print(f"Found {len(intermediate_courses)} intermediate courses and {len(related_domain_courses)} beginner courses in related domains")
@@ -319,34 +344,38 @@ def get_course_recommendations(user_data):
                 reverse=True
             )
             
-            # Add one intermediate course if available
+            # Add one intermediate course if available (randomly select from top 3)
             if intermediate_courses:
+                top_intermediate = intermediate_courses[:min(3, len(intermediate_courses))]
+                selected_course = random.choice(top_intermediate)
                 recommendations.append({
-                    'id': intermediate_courses[0].id,
-                    'name': intermediate_courses[0].name,
-                    'domain': intermediate_courses[0].domain,
-                    'duration': intermediate_courses[0].duration,
-                    'difficulty': intermediate_courses[0].difficulty,
-                    'prerequisites': intermediate_courses[0].prerequisites,
-                    'description': intermediate_courses[0].description,
-                    'instructor': intermediate_courses[0].instructor,
-                    'rating': intermediate_courses[0].rating,
-                    'url': intermediate_courses[0].url
+                    'id': selected_course.id,
+                    'name': selected_course.name,
+                    'domain': selected_course.domain,
+                    'duration': selected_course.duration,
+                    'difficulty': selected_course.difficulty,
+                    'prerequisites': selected_course.prerequisites,
+                    'description': selected_course.description,
+                    'instructor': selected_course.instructor,
+                    'rating': selected_course.rating,
+                    'url': selected_course.url
                 })
             
-            # Add one beginner course from a related domain if available
+            # Add one beginner course from a related domain if available (randomly select from top 3)
             if related_domain_courses:
+                top_related = related_domain_courses[:min(3, len(related_domain_courses))]
+                selected_course = random.choice(top_related)
                 recommendations.append({
-                    'id': related_domain_courses[0].id,
-                    'name': related_domain_courses[0].name,
-                    'domain': related_domain_courses[0].domain,
-                    'duration': related_domain_courses[0].duration,
-                    'difficulty': related_domain_courses[0].difficulty,
-                    'prerequisites': related_domain_courses[0].prerequisites,
-                    'description': related_domain_courses[0].description,
-                    'instructor': related_domain_courses[0].instructor,
-                    'rating': related_domain_courses[0].rating,
-                    'url': related_domain_courses[0].url
+                    'id': selected_course.id,
+                    'name': selected_course.name,
+                    'domain': selected_course.domain,
+                    'duration': selected_course.duration,
+                    'difficulty': selected_course.difficulty,
+                    'prerequisites': selected_course.prerequisites,
+                    'description': selected_course.description,
+                    'instructor': selected_course.instructor,
+                    'rating': selected_course.rating,
+                    'url': selected_course.url
                 })
         
         # If no recommendations were found, use default recommendations
@@ -362,41 +391,60 @@ def get_course_recommendations(user_data):
         return get_default_recommendations(user_data)
 
 def get_default_recommendations(user_data):
-    # Default recommendations based on domain and difficulty
-    domain = user_data.get('domain', 'Programming')
-    difficulty = user_data.get('difficulty', 'Beginner')
-    
-    # Find courses in the same domain with slightly higher difficulty
-    if difficulty == 'Beginner':
-        next_difficulty = 'Intermediate'
-    elif difficulty == 'Intermediate':
-        next_difficulty = 'Advanced'
-    else:
-        next_difficulty = 'Advanced'
-    
-    # Query courses
-    courses = Course.query.filter_by(domain=domain, difficulty=next_difficulty).limit(3).all()
-    
-    if not courses:
-        # If no courses found, try any domain with the same difficulty
-        courses = Course.query.filter_by(difficulty=next_difficulty).limit(3).all()
-    
-    if not courses:
-        # If still no courses found, return any courses
-        courses = Course.query.limit(3).all()
-    
-    return [{
-        'id': course.id,
-        'name': course.name,
-        'domain': course.domain,
-        'duration': course.duration,
-        'difficulty': course.difficulty,
-        'prerequisites': course.prerequisites,
-        'url': course.url,
-        'description': course.description,
-        'rating': course.rating,
-        'instructor': course.instructor
-    } for course in courses]
+    """Get default course recommendations when no specific recommendations are available"""
+    try:
+        print("Getting default recommendations")
+        
+        # Get user's previously completed courses
+        user_id = user_data.get('user_id')
+        completed_courses = []
+        if user_id:
+            completed_certificates = UserCertificate.query.filter_by(user_id=user_id).all()
+            completed_courses = [cert.course_id for cert in completed_certificates]
+            print(f"User has completed {len(completed_courses)} courses")
+        
+        # Get all courses excluding completed ones
+        all_courses = Course.query.all()
+        available_courses = [c for c in all_courses if c.id not in completed_courses]
+        
+        if not available_courses:
+            print("No available courses for default recommendations")
+            return []
+        
+        # Sort by rating and students count
+        sorted_courses = sorted(
+            available_courses,
+            key=lambda x: (x.rating * 0.7 + (x.students_count / 100000) * 0.3),
+            reverse=True
+        )
+        
+        # Get top 5 courses
+        top_courses = sorted_courses[:min(5, len(sorted_courses))]
+        
+        # Randomly select 2 courses from the top 5
+        selected_courses = random.sample(top_courses, min(2, len(top_courses)))
+        
+        recommendations = []
+        for course in selected_courses:
+            recommendations.append({
+                'id': course.id,
+                'name': course.name,
+                'domain': course.domain,
+                'duration': course.duration,
+                'difficulty': course.difficulty,
+                'prerequisites': course.prerequisites,
+                'description': course.description,
+                'instructor': course.instructor,
+                'rating': course.rating,
+                'url': course.url
+            })
+        
+        print(f"Returning {len(recommendations)} default recommendations")
+        return recommendations
+        
+    except Exception as e:
+        print(f"Error getting default recommendations: {str(e)}")
+        return []
 
 # Routes
 @app.route('/')
